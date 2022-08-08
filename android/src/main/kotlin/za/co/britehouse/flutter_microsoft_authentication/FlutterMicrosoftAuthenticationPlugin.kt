@@ -3,41 +3,45 @@ package za.co.britehouse.flutter_microsoft_authentication
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import androidx.annotation.NonNull
 import com.microsoft.identity.client.*
 import com.microsoft.identity.client.exception.MsalClientException
 import com.microsoft.identity.client.exception.MsalException
 import com.microsoft.identity.client.exception.MsalServiceException
 import com.microsoft.identity.client.exception.MsalUiRequiredException
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.FlutterPlugin.FlutterPluginBinding
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.PluginRegistry.Registrar
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+class FlutterMicrosoftAuthenticationPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
-class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
+  private lateinit var channel : MethodChannel
+  private lateinit var activity: Activity
+  private lateinit var context: Context
+  private var binding: FlutterPluginBinding? = null
   private var mSingleAccountApp: ISingleAccountPublicClientApplication? = null
 
   companion object {
-
-    lateinit var mainActivity: Activity
-    lateinit var mRegistrar: Registrar
     private const val TAG = "FMAuthPlugin"
-
-    @JvmStatic
-    fun registerWith(registrar: Registrar) {
-      val channel = MethodChannel(registrar.messenger(), "flutter_microsoft_authentication")
-      channel.setMethodCallHandler(FlutterMicrosoftAuthenticationPlugin())
-      mainActivity = registrar.activity()
-      mRegistrar = registrar
-    }
   }
 
-  override fun onMethodCall(call: MethodCall, result: Result) {
+  override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    context = flutterPluginBinding.applicationContext
+    binding = flutterPluginBinding;
 
+    channel = MethodChannel(flutterPluginBinding.binaryMessenger, "flutter_microsoft_authentication")
+    channel.setMethodCallHandler(this)
+  }
+
+  override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     val scopesArg : ArrayList<String> = call.argument("scopes")!!
     val scopes: Array<String> = scopesArg?.toTypedArray()!!
     val authority: String = call.argument("authority")!!
@@ -51,19 +55,37 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
       "init" -> initPlugin(configPath)
       else -> result.notImplemented()
     }
+  }
 
+  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    channel.setMethodCallHandler(null)
+    this.binding = null;
 
+  }
+
+  override fun onDetachedFromActivity() {
+    TODO("Not yet implemented")
+  }
+
+  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+    onAttachedToActivity(binding)
+  }
+
+  override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+    activity = binding.activity;
+  }
+
+  override fun onDetachedFromActivityForConfigChanges() {
+    TODO("Not yet implemented")
   }
 
   @Throws(IOException::class)
   private fun getConfigFile(path: String): File {
-    val key: String = mRegistrar.lookupKeyForAsset(path)
-    val configFile = File(mainActivity.applicationContext.cacheDir, "config.json")
-
-
+    val key: String = binding?.getFlutterAssets()?.getAssetFilePathBySubpath(path)!!
+    val configFile = File(activity.applicationContext.cacheDir, "config.json")
 
     try {
-      val assetManager = mRegistrar.context().assets
+      val assetManager = context.assets
 
       val inputStream = assetManager.open(key)
       val outputStream = FileOutputStream(configFile)
@@ -90,26 +112,26 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
 
   private fun createSingleAccountPublicClientApplication(assetPath: String) {
     val configFile = getConfigFile(assetPath)
-    val context: Context = mainActivity.applicationContext
+    val context: Context = activity.applicationContext
 
     PublicClientApplication.createSingleAccountPublicClientApplication(
-            context,
-            configFile,
-            object : IPublicClientApplication.ISingleAccountApplicationCreatedListener {
-              override fun onCreated(application: ISingleAccountPublicClientApplication) {
-                /**
-                 * This test app assumes that the app is only going to support one account.
-                 * This requires "account_mode" : "SINGLE" in the config json file.
-                 *
-                 */
-                Log.d(TAG, "INITIALIZED")
-                mSingleAccountApp = application
-              }
+      context,
+      configFile,
+      object : IPublicClientApplication.ISingleAccountApplicationCreatedListener {
+        override fun onCreated(application: ISingleAccountPublicClientApplication) {
+          /**
+           * This test app assumes that the app is only going to support one account.
+           * This requires "account_mode" : "SINGLE" in the config json file.
+           *
+           */
+          Log.d(TAG, "INITIALIZED")
+          mSingleAccountApp = application
+        }
 
-              override fun onError(exception: MsalException) {
-                Log.e(TAG, exception.message!!)
-              }
-            })
+        override fun onError(exception: MsalException) {
+          Log.e(TAG, exception.message!!)
+        }
+      })
   }
 
   private fun acquireTokenInteractively(scopes: Array<String>, authority: String, result: Result) {
@@ -117,7 +139,7 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
       result.error("MsalClientException", "Account not initialized", null)
     }
 
-    return mSingleAccountApp!!.signIn(mainActivity, "", scopes, getAuthInteractiveCallback(result))
+    return mSingleAccountApp!!.signIn(activity, "", scopes, getAuthInteractiveCallback(result))
   }
 
   private fun acquireTokenSilently(scopes: Array<String>, authority: String, result: Result) {
@@ -166,12 +188,12 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
         if (exception is MsalClientException) {
           /* Exception inside MSAL, more info inside MsalError.java */
           Log.d(TAG, "Authentication failed: MsalClientException")
-          result.error("MsalClientException",exception.errorCode, null)
+          result.error("MsalClientException", exception.errorCode, null)
 
         } else if (exception is MsalServiceException) {
           /* Exception when communicating with the STS, likely config issue */
           Log.d(TAG, "Authentication failed: MsalServiceException")
-          result.error("MsalServiceException",exception.errorCode, null)
+          result.error("MsalServiceException", exception.errorCode, null)
         }
       }
 
@@ -197,17 +219,17 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
         Log.d(TAG, "Authentication failed: ${exception.message}")
 
         when (exception) {
-            is MsalClientException -> {
-              /* Exception inside MSAL, more info inside MsalError.java */
-              result.error("MsalClientException",exception.message, null)
-            }
+          is MsalClientException -> {
+            /* Exception inside MSAL, more info inside MsalError.java */
+            result.error("MsalClientException", exception.message, null)
+          }
           is MsalServiceException -> {
             /* Exception when communicating with the STS, likely config issue */
-            result.error("MsalServiceException",exception.message, null)
+            result.error("MsalServiceException", exception.message, null)
           }
           is MsalUiRequiredException -> {
             /* Tokens expired or no session, retry with interactive */
-            result.error("MsalUiRequiredException",exception.message, null)
+            result.error("MsalUiRequiredException", exception.message, null)
           }
         }
       }
@@ -226,7 +248,7 @@ class FlutterMicrosoftAuthenticationPlugin: MethodCallHandler {
     }
 
     return mSingleAccountApp!!.getCurrentAccountAsync(object :
-            ISingleAccountPublicClientApplication.CurrentAccountCallback {
+      ISingleAccountPublicClientApplication.CurrentAccountCallback {
       override fun onAccountLoaded(activeAccount: IAccount?) {
         if (activeAccount != null) {
           result.success(activeAccount.username)
