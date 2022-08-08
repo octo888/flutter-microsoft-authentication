@@ -16,9 +16,9 @@ public class SwiftFlutterMicrosoftAuthenticationPlugin: NSObject, FlutterPlugin 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
 
     let dict = call.arguments! as! NSDictionary
-    let clientId = dict["kClientID"] as! String
-    let scopes = dict["kScopes"] as! [String]
-    let authority = dict["kAuthority"] as! String
+    let clientId = dict["clientID"] as! String
+    let scopes = dict["scopes"] as! [String]
+    let authority = dict["authority"] as! String
 
     let msalView = ViewController()
     msalView.onInit(clientId: clientId, scopes: scopes, authority: authority, flutterResult: result)
