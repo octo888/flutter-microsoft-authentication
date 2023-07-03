@@ -64,7 +64,8 @@ class FlutterMicrosoftAuthenticationPlugin: FlutterPlugin, MethodCallHandler, Ac
   }
 
   override fun onDetachedFromActivity() {
-    TODO("Not yet implemented")
+    channel.setMethodCallHandler(null)
+    this.binding = null;
   }
 
   override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
