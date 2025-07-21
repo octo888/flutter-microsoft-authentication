@@ -2,7 +2,7 @@ group 'za.co.britehouse.flutter_microsoft_authentication'
 version '1.0-SNAPSHOT'
 
 buildscript {
-    ext.kotlin_version = '1.5.10'
+    ext.kotlin_version = '1.8.20'
     repositories {
         google()
         jcenter()
@@ -34,7 +34,14 @@ apply plugin: 'kotlinx-serialization'
 
 android {
     compileSdkVersion 30
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 
+    kotlinOptions {
+        jvmTarget = "17"
+    }
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
